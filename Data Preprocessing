@@ -1,0 +1,682 @@
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PrintWriter;
+import java.io.StringReader;
+import java.text.ParseException;
+import java.util.*;
+
+import edu.stanford.nlp.io.*;
+import edu.stanford.nlp.ling.*;
+import edu.stanford.nlp.pipeline.*;
+import edu.stanford.nlp.trees.*;
+import edu.stanford.nlp.util.*;
+
+import javax.json.*;
+
+
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+
+import edu.stanford.nlp.ling.CoreAnnotations;
+import edu.stanford.nlp.ling.CoreAnnotations.NamedEntityTagAnnotation;
+import edu.stanford.nlp.ling.CoreAnnotations.PartOfSpeechAnnotation;
+import edu.stanford.nlp.ling.CoreAnnotations.SentencesAnnotation;
+import edu.stanford.nlp.ling.CoreAnnotations.TextAnnotation;
+import edu.stanford.nlp.ling.CoreAnnotations.TokensAnnotation;
+import edu.stanford.nlp.ling.CoreLabel;
+import edu.stanford.nlp.neural.rnn.RNNCoreAnnotations;
+import edu.stanford.nlp.pipeline.Annotation;
+import edu.stanford.nlp.pipeline.StanfordCoreNLP;
+import edu.stanford.nlp.sentiment.SentimentCoreAnnotations;
+import edu.stanford.nlp.trees.Tree;
+import edu.stanford.nlp.util.CoreMap;
+import edu.stanford.nlp.util.TypesafeMap.Key;
+
+public class ParsingJSON {
+	
+
+	public static void main(String[] args) throws Exception{
+		
+		HashMap<String,ArrayList<String>> reviews=new HashMap<String,ArrayList<String>>();
+		ArrayList<String> content=new ArrayList<String>();
+		ArrayList<String> sentences_content=new ArrayList<String>();
+		
+	
+		String file_name=args[0];
+		content=parseReview(file_name);
+		
+		String hotelName=parseHotelName(file_name);
+		reviews.put(hotelName, content);
+	//	System.out.println(content);
+		
+		Properties props=new Properties();
+		props.setProperty("annotators","tokenize,ssplit,pos,lemma,parse,sentiment");
+		
+		StanfordCoreNLP pipeline=new StanfordCoreNLP(props);
+		
+		
+		Iterator inc=content.iterator();
+		while(inc.hasNext()){
+			String con=(String)inc.next();
+			Annotation review_content=new Annotation(con);
+			pipeline.annotate(review_content);
+			
+			List<CoreMap> sentences=review_content.get(SentencesAnnotation.class);
+			
+			for(CoreMap sentence:sentences){
+				String s=String.valueOf(sentence);
+				sentences_content.add(s);
+				
+			}
+			
+		}
+		
+		
+		
+		
+		
+	//	System.out.println(sentences_content);
+		
+		HashMap<String,ArrayList<String>> synonymns=new HashMap<String,ArrayList<String>>(); 
+		
+		ArrayList<String> foods = new ArrayList<String>();
+		foods.addAll(Arrays.asList("Meal","to-go","food","lunch","breakfast","bar","dinner","drink","cuisine","appetizer","delicious","desserts","delicacies","buffet","ala-carte","stale food","main course","starters","soup","water","non vegetarian","meat","beaf","beverages","cafe","coffee","chocolate"));
+		ArrayList<String> rooms= new ArrayList<String>();
+		rooms.addAll(Arrays.asList("room","cleanliness","stay","spacious","budget","expenses","price","tidy","comfort","big","small","size","availability","large","bed","wash rooms","bed sheets","towels","shabby","accessories","rest rooms","wifi","internet","ac","television","amenities","light","electricity"));
+		ArrayList<String> service = new ArrayList<String>();
+		service.addAll(Arrays.asList("behaviour","rude","friendly","staff","hospitality","service","flexible","availability","late","reply","maintenance","utility","duty","useful","courtesy","check","kind"));
+		ArrayList<String> location = new ArrayList<String>();
+		location.addAll(Arrays.asList("near","far","up hill","down hill","street","short","long","lane","Far","freeway","location","city","town","out skirts","down town","metropolitan","tourist","spot","scene","neighbourhood","county","region"));
+		
+		
+		synonymns.put("food", foods);
+		synonymns.put("room", rooms);
+		synonymns.put("service", service);
+		synonymns.put("location", location);
+		
+		
+		HashMap<String,ArrayList<String>> grouped_content=grouping_Sentences(sentences_content,synonymns);
+		
+		HashMap<String,Integer> food_reviews_sentiment=new HashMap<String,Integer>();
+		HashMap<String,Integer> room_reviews_sentiment=new HashMap<String,Integer>();
+		HashMap<String,Integer> service_reviews_sentiment=new HashMap<String,Integer>();
+		HashMap<String,Integer> location_reviews_sentiment=new HashMap<String,Integer>();
+		
+		Iterator map_iterator=grouped_content.entrySet().iterator();
+		while(map_iterator.hasNext()){
+			Map.Entry pair=(Map.Entry)map_iterator.next();
+			ArrayList<String> val=(ArrayList)pair.getValue();
+			String ke=(String)pair.getKey();
+			
+			if(ke.equals("food")){
+				for(String rev:val){
+					int sentiment=findSentiment(rev);
+					food_reviews_sentiment.put(rev,sentiment);
+				}
+			}
+			
+			else if(ke.equals("room")){
+				for(String rev:val){
+					int sentiment=findSentiment(rev);
+					room_reviews_sentiment.put(rev,sentiment);
+				}
+			}
+			
+			else if(ke.equals("service")){
+				for(String rev:val){
+					int sentiment=findSentiment(rev);
+					service_reviews_sentiment.put(rev,sentiment);
+				}
+			}
+			
+			else if(ke.equals("location")){
+				for(String rev:val){
+					int sentiment=findSentiment(rev);
+					location_reviews_sentiment.put(rev,sentiment);
+				}
+			}
+			
+		}
+		
+		Iterator food_review_iterator=food_reviews_sentiment.entrySet().iterator();
+		while(food_review_iterator.hasNext()){
+			Map.Entry food_pair=(Map.Entry)food_review_iterator.next();
+			String review_text=(String)food_pair.getKey();
+			int food_sentiment=(Integer)food_pair.getValue();
+			
+			if(food_sentiment==3){
+				System.out.println(review_text);
+			}
+			
+		}
+		
+	
+		
+		
+		//String sent="The phones come with a PTT button - a feature that isn't yet available. No bluetooth but the infrared is sufficient.  General feel of the phone is that it has a nice fit but it does feel a little on the cheap side.  Reasonably price for a low to mid-range phone.";
+		
+	//	List<CoreMap> sentences=document.get(SentencesAnnotation.class);
+		//for(CoreMap sentence:sentences){
+			//System.out.println(sentence);
+		//	for(CoreLabel token:sentence.get(TokensAnnotation.class)){
+				
+				//String word=token.get(TextAnnotation.class);
+				//String pos=token.get(PartOfSpeechAnnotation.class);
+				//String ne = token.get(NamedEntityTagAnnotation.class);
+				
+			//	if(pos.equals("NN")){
+			//		System.out.println(word);
+			//	}
+				
+				//System.out.println(word + " " + pos +" "  + ne + "\n");
+				
+		//	}
+	//	}
+		
+		
+		
+	/*	System.out.println(food_reviews_sentiment);
+		System.out.println(room_reviews_sentiment);
+		System.out.println(service_reviews_sentiment);
+		System.out.println(location_reviews_sentiment);*/
+		
+		ArrayList<Integer> food_sentiments=groupSentiment(food_reviews_sentiment);
+		ArrayList<Integer> rooms_sentiments=groupSentiment(room_reviews_sentiment);
+		ArrayList<Integer> service_sentiments=groupSentiment(service_reviews_sentiment);
+		ArrayList<Integer> location_sentiments=groupSentiment(location_reviews_sentiment);
+		
+		HashMap<String,ArrayList<Integer>> sentiments=new HashMap<String,ArrayList<Integer>>();
+		sentiments.put("food", food_sentiments);
+		sentiments.put("rooms", rooms_sentiments);
+		sentiments.put("location", service_sentiments);
+		sentiments.put("service", location_sentiments);
+/*	//	System.out.println(food_sentiments);
+		System.out.println(rooms_sentiments);
+		System.out.println(service_sentiments);
+		System.out.println(location_sentiments);*/
+		
+	
+		
+		
+		ArrayList<Integer> overall_sentiment=new ArrayList<Integer>();
+		
+		Iterator content_iterator=content.iterator();
+		while(content_iterator.hasNext()){
+			
+			String overall_review_text=(String)content_iterator.next();
+			int overall_sent=findSentiment_OverallContent(overall_review_text);
+			overall_sentiment.add(overall_sent);
+		}
+		
+//		System.out.println(overall_sentiment);
+		
+		Json_Output(hotelName,sentiments,overall_sentiment);
+		
+		
+		System.out.printf("Location Rating "+ "%.1f",final_aspect_sentiment(location_sentiments));
+		System.out.println();
+		System.out.printf("Service Rating " + " %.1f ",final_aspect_sentiment(service_sentiments));
+		System.out.println();
+		System.out.printf("Rooms Rating " + " %.1f ",final_aspect_sentiment(rooms_sentiments));
+		System.out.println();
+		System.out.printf("Food Rating "+ " %.1f ",final_aspect_sentiment(food_sentiments));
+		System.out.println();
+		System.out.printf("Overall Rating "+ " %.1f ",final_aspect_sentiment(overall_sentiment));
+		
+		Write_Final_Aspect_Ratings(hotelName,location_sentiments,food_sentiments,service_sentiments,rooms_sentiments,overall_sentiment);
+		
+	}
+	
+	
+	
+	public static HashMap<String,ArrayList<String>> grouping_Sentences(ArrayList<String> sentences,HashMap<String,ArrayList<String>> words){
+		
+		HashMap<String,ArrayList<String>> grouped_sentences=new HashMap<String,ArrayList<String>>();
+		
+		ArrayList<String> food_list=new ArrayList<String>();
+		ArrayList<String> room_list=new ArrayList<String>();
+		ArrayList<String> service_list=new ArrayList<String>();
+		ArrayList<String> location_list=new ArrayList<String>();
+		
+		boolean flag=false;
+		
+		ArrayList<String> food_sorted_list=(ArrayList)words.get("food");
+		ArrayList<String> room_sorted_list=(ArrayList)words.get("room");
+		ArrayList<String> service_sorted_list=(ArrayList)words.get("service");
+		ArrayList<String> location_sorted_list=(ArrayList)words.get("location");
+		
+		for(String sentence : sentences){
+			
+			String sentence_lower=sentence.toLowerCase();
+		
+			for(String word : food_sorted_list){
+				
+				
+				
+				if(sentence_lower.contains(word)){
+				//	System.out.println(sentence);
+					food_list.add(sentence);
+					flag=true;
+					
+					}
+				
+				if(flag){
+					flag=false;
+					break;
+				}
+			}
+		}
+		
+		sentences.removeAll(food_list);
+		
+		for(String sentence : sentences){
+			
+			String sentence_lower=sentence.toLowerCase();
+			
+			for(String room_word : room_sorted_list){
+				
+				if(sentence_lower.contains(room_word)){
+				//	System.out.println(sentence);
+					room_list.add(sentence);
+					flag=true;
+				}
+				
+				if(flag){
+					flag=false;
+					break;
+				}
+			}
+			
+		}
+		
+		sentences.removeAll(room_list);
+		
+		for(String sentence : sentences){
+			
+			String sentence_lower=sentence.toLowerCase();
+			
+			for(String service_word : service_sorted_list){
+				
+				if(sentence_lower.contains(service_word)){
+				//	System.out.println(sentence);
+					service_list.add(sentence);
+					flag=true;
+				}
+				
+				if(flag){
+					flag=false;
+					break;
+				}
+			}
+			
+		}
+		
+		sentences.removeAll(service_list);
+		
+		for(String sentence : sentences){
+			
+			String sentence_lower=sentence.toLowerCase();
+			
+			for(String location_word : location_sorted_list){
+				
+				if(sentence_lower.contains(location_word)){
+				//	System.out.println(sentence);
+					location_list.add(sentence);
+					flag=true;
+				}
+				
+				if(flag){
+					flag=false;
+					break;
+				}
+			}
+		}
+		
+		sentences.removeAll(location_list);
+		
+	//	System.out.println(sentences);
+		
+		grouped_sentences.put("food",food_list);
+		grouped_sentences.put("room",room_list);
+		grouped_sentences.put("service",service_list);
+		grouped_sentences.put("location",location_list);
+		
+		
+		return grouped_sentences;
+		
+		
+	}
+	
+	public static ArrayList<String> parseReview(String fileName) throws org.json.simple.parser.ParseException{
+		
+		ArrayList<String> review_content=null;
+		
+		  try {
+		        ArrayList<JSONObject> jsons=ReadJSON(new File(fileName),"UTF-8");
+		      //  System.out.println(jsons);
+		        
+		        Iterator it=jsons.iterator();
+		        while(it.hasNext()){
+		        	JSONObject job=(JSONObject)it.next();
+		        	ArrayList<JSONObject> review=(ArrayList<JSONObject>)job.get("Reviews");
+		        	review_content=extract_ReviewContent(review);
+		        }
+		        
+		    } catch (FileNotFoundException e) {
+		        e.printStackTrace();
+		    } catch (ParseException e) {
+		        e.printStackTrace();
+		    }
+		  
+		  return review_content;
+		    
+		
+	}
+	
+	public static String parseHotelName(String fileName) throws org.json.simple.parser.ParseException{
+		
+	
+		String restaurant_id=null;
+		String restaurant_name=null;
+		  try {
+		        ArrayList<JSONObject> jsons=ReadJSON(new File(fileName),"UTF-8");
+		      //  System.out.println(jsons);
+		        
+		        Iterator it=jsons.iterator();
+		        while(it.hasNext()){
+		        	JSONObject job=(JSONObject)it.next();
+		        	JSONObject hotel_info=(JSONObject)job.get("HotelInfo");
+		        	restaurant_id=extract_HotelId(hotel_info);
+		        	
+		        	restaurant_name=extract_HotelName(hotel_info);
+		        }
+		        
+		    } catch (FileNotFoundException e) {
+		        e.printStackTrace();
+		    } catch (ParseException e) {
+		        e.printStackTrace();
+		    }
+		  
+		  return restaurant_name;
+		    
+		
+	}
+	
+	public static ArrayList<JSONObject> ReadJSON(File MyFile,String Encoding) throws FileNotFoundException, ParseException, org.json.simple.parser.ParseException {
+	    Scanner scn=new Scanner(MyFile,Encoding);
+	    ArrayList<JSONObject> json=new ArrayList<JSONObject>();
+	    while(scn.hasNext()){
+	        JSONObject obj= (JSONObject) new JSONParser().parse(scn.nextLine());
+	        json.add(obj);
+	    }
+	    return json;
+	}
+	
+	
+	public static ArrayList<String> extract_ReviewContent(ArrayList<JSONObject> json_list){
+		ArrayList<String> content=new ArrayList<String>();
+		Iterator it=json_list.iterator();
+		while(it.hasNext()){
+			//System.out.println(it.next());
+			JSONObject review_content=(JSONObject)it.next();
+			String s=(String)review_content.get("Content");
+		//	System.out.println(s);
+			content.add(s);
+		}
+		
+		
+	//	System.out.println(content);
+		
+		return content;
+		
+	}
+	
+public static String extract_HotelId(JSONObject hotelinfo){
+	
+	
+	
+		String hotel_id=(String)hotelinfo.get("HotelID");
+	//	System.out.println(hotel_id);
+		return hotel_id;
+	}
+
+public static String extract_HotelName(JSONObject hotelinfo){
+	
+	
+	
+	String hotel_name=(String)hotelinfo.get("Name");
+//	System.out.println(hotel_id);
+	return hotel_name;
+}
+
+	
+	
+	
+	public static ArrayList<Integer> groupSentiment(HashMap<String,Integer> review_sentiments){
+		
+		ArrayList<Integer> grouped_sentiments=new ArrayList<Integer>();
+		
+		Iterator it=review_sentiments.entrySet().iterator();
+		while(it.hasNext()){
+			Map.Entry pair=(Map.Entry)it.next();
+			int sentiment=(Integer)pair.getValue();
+			grouped_sentiments.add(sentiment);
+		}
+		
+		return grouped_sentiments;
+		
+	}
+	
+	public static void overallSentiment(ArrayList<String> review_content){
+		
+		Iterator it=review_content.iterator();
+		while(it.hasNext()){
+			String temp=(String)it.next();
+			System.out.println(findSentiment(temp));
+		}
+		
+	}
+	
+	public static int findSentiment(String line){
+		
+		Properties props=new Properties();
+		props.setProperty("annotators","tokenize,ssplit,pos,lemma,parse,sentiment");
+		
+		PrintWriter out=new PrintWriter(System.out);
+		
+		StanfordCoreNLP pipeline=new StanfordCoreNLP(props);
+		
+		int main_sentiment=0;
+		
+		if(line != null && line.length()>0){
+			int longest=0;
+			Annotation annotation=pipeline.process(line);
+			
+
+			for(CoreMap sentence:annotation.get(CoreAnnotations.SentencesAnnotation.class)){
+				Tree tree=sentence.get(SentimentCoreAnnotations.AnnotatedTree.class);
+				int sentiment=RNNCoreAnnotations.getPredictedClass(tree);
+				
+				out.println();
+				out.println(sentence.toShorterString());
+				
+				main_sentiment=sentiment;
+			}
+		}
+		
+		return main_sentiment;
+	}
+	
+	public static void Json_Output(String hotel_name,HashMap<String,ArrayList<Integer>> review_sentiments,ArrayList<Integer> overallSentiments) throws IOException{
+		
+		JSONObject jsonobj=new JSONObject();
+		jsonobj.put("Restaurant_Name", hotel_name);
+		
+		JSONArray sentiments=new JSONArray();
+		
+		Iterator inc=review_sentiments.entrySet().iterator();
+		while(inc.hasNext()){
+			
+			Map.Entry pair=(Map.Entry)inc.next();
+			String key=(String)pair.getKey();
+			ArrayList<String> val=(ArrayList)pair.getValue();
+			JSONObject job=new JSONObject();
+			job.put(key, val);
+			sentiments.add(job);
+			
+		}
+		
+		jsonobj.put("Overall",overallSentiments);
+		
+		jsonobj.put("Aspect_Sentiments",sentiments);
+		
+	//	System.out.println(jsonobj.toJSONString());
+		String temp="/home/cloudera/Downloads/Restaurant_Sentiments.txt";
+		
+		try{
+			
+			FileWriter fw=new FileWriter(temp,true);
+			BufferedWriter bw=new BufferedWriter(fw);
+			PrintWriter pw=new PrintWriter(bw);
+				
+			pw.println(jsonobj.toString());
+			
+			pw.close();
+			bw.close();
+			fw.close();
+			
+			}catch(Exception e){
+				
+			}
+		
+		
+		
+	}
+	
+	public static void Write_Final_Aspect_Ratings(String hotelName,ArrayList<Integer> locations,ArrayList<Integer> food,ArrayList<Integer> service,ArrayList<Integer> rooms,ArrayList<Integer> overall) throws Exception{
+		HashMap<String,Float> hm=new HashMap<String,Float>();
+		JSONObject rankjob=new JSONObject();
+		JSONArray rankarray=new JSONArray();
+		String ratings_file="/home/cloudera/Downloads/Restaurant_Rankings.json";
+		float location_rank=final_aspect_sentiment(locations);
+		float food_rank=final_aspect_sentiment(food);
+		float service_rank=final_aspect_sentiment(service);
+		float rooms_rank=final_aspect_sentiment(rooms);
+		float overall_rank=final_aspect_sentiment(overall);
+		
+		
+			
+			hm.put("Food", food_rank);
+			hm.put("Location", location_rank);
+			hm.put("Rooms",rooms_rank);
+			hm.put("Service", service_rank);
+			hm.put("Overall", overall_rank);
+			
+			Iterator mapit=hm.entrySet().iterator();
+			while(mapit.hasNext()){
+				Map.Entry pair=(Map.Entry)mapit.next();
+				String k=(String)pair.getKey();
+				Float v=(Float)pair.getValue();
+				JSONObject temp=new JSONObject();
+				temp.put(k, v);
+				rankarray.add(temp);
+			}
+			
+			
+				rankjob.put("Restaurant Name", hotelName);
+				rankjob.put("Ratings", rankarray);
+
+		
+			
+			try{
+				FileWriter fw=new FileWriter(ratings_file,true);
+				BufferedWriter bw=new BufferedWriter(fw);
+				PrintWriter pw=new PrintWriter(bw);
+				
+				pw.println(rankjob.toJSONString());
+				
+				pw.close();
+				bw.close();
+				fw.close();
+				
+			}catch(Exception e){
+				
+			}
+			
+		
+	}
+	
+	public static int findSentiment_OverallContent(String overall_content){
+		
+		Properties proper=new Properties();
+		proper.setProperty("annotators", "tokenize,ssplit,pos,lemma,parse,sentiment");
+		StanfordCoreNLP scnp=new StanfordCoreNLP(proper);
+		
+		Annotation anno=scnp.process(overall_content);
+		float main_sentiment=0;
+		int count=0;
+		
+		for(CoreMap sentence:anno.get(CoreAnnotations.SentencesAnnotation.class)){
+			Tree tree=sentence.get(SentimentCoreAnnotations.AnnotatedTree.class);
+			String text_sent=String.valueOf(sentence);
+			count++;
+			float sentiment=RNNCoreAnnotations.getPredictedClass(tree);
+			main_sentiment+=sentiment;
+			
+	//		System.out.println(sentence+" "+sentiment);
+			
+		}
+		
+		int rounded_sentiment=(int)Math.ceil(main_sentiment/count);
+	//	System.out.println(rounded_sentiment);
+		
+		return rounded_sentiment;
+		
+	}
+	
+	public static float final_aspect_sentiment(ArrayList<Integer> al){
+		
+		int len=al.size();
+		long sum=0;
+		Iterator it=al.iterator();
+		while(it.hasNext()){
+			int temp=(Integer)it.next();
+			sum=sum+temp;
+		}
+		
+		float final_sent=sum/(float)len;
+		float temp=Math.round(final_sent);
+		float final_rank=normalize_rank(temp);
+		float rank=Float.valueOf(String.format("%.1f", final_rank));
+		return rank;
+	}
+	
+	public static float normalize_rank(float sentiment){
+		float rank=0;
+		float datalow=0;
+		float datahigh=4;
+		float normalizedlow=1;
+		float normalizedhigh=5;
+		
+		float datad=datahigh-datalow;
+		float normalized=normalizedhigh-normalizedlow;
+		
+		float y= ( (sentiment - datalow) / (datad) ) * (normalized) + normalizedlow;
+		
+		rank =y;
+		
+		return rank;
+		
+	}
+}
+	
+	
+
