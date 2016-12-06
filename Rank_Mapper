@@ -1,0 +1,68 @@
+
+import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.mapreduce.Mapper;
+
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+
+import java.io.*;
+import java.text.DecimalFormat;
+import java.util.Iterator;
+
+public class Rank_Mapper extends Mapper<Object, Text, Text, DoubleWritable>{
+	
+	public void map(Object key,Text value,Context output) throws IOException,InterruptedException{
+		String hotel_record=String.valueOf(value);
+		JSONParser jp=new JSONParser();
+		try{
+			//System.out.println(key);
+			//System.out.println(value);
+			JSONObject hotel=(JSONObject)jp.parse(hotel_record);
+			String hotelname=(String)hotel.get("Restaurant Name");
+			JSONArray rating=(JSONArray)hotel.get("Ratings");
+			JSONObject aspect=new JSONObject();
+			aspect=(JSONObject)rating.get(0);
+			double r=(Double)aspect.get("Overall");
+			
+			aspect=(JSONObject)rating.get(1);
+			double s=(Double)aspect.get("Service");
+			
+			aspect=(JSONObject)rating.get(2);
+			double ro=(Double)aspect.get("Rooms");
+			
+			aspect=(JSONObject)rating.get(3);
+			double f=(Double)aspect.get("Food");
+			
+			aspect=(JSONObject)rating.get(4);
+			double l=(Double)aspect.get("Location");
+			
+		//	String food="Food_Rating_"+(int)food_rating;
+		//	String room="Rooms_Rating_"+(int)food_rating;
+		//	String service="Service_Rating_"+(int)service_rating;
+		//	String location="Location_Rating_"+(int)location_rating;
+		//	String overall="Overall_Rating_"+(int)overall_rating;
+		
+			double rank=(0.3*f) + (0.3*ro) + (0.2*s) + (0.1*l) + (0.1*r);
+			
+			DecimalFormat df=new DecimalFormat("#.#");
+			rank=Double.valueOf(df.format(rank)); 
+			output.write(new Text(hotelname), new DoubleWritable(rank));
+			
+		//	output.write(new Text(food),new Text(hotelname) );
+	//		output.write(new Text(room), new Text(hotelname));
+		//	output.write(new Text(service),new Text(hotelname) );
+		//	output.write(new Text(location), new Text(hotelname));
+			
+		}catch(Exception e){
+			
+		}
+		
+		
+	}
+	
+
+}
